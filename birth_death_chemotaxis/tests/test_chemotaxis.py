@@ -17,10 +17,19 @@ from chemotaxis import (
     minimum_image,
     simulate,
     torus_rms,
+    torus_wasserstein2,
 )
 
 
 class GeometryTests(unittest.TestCase):
+    def test_wasserstein2_uses_periodic_optimal_matching(self) -> None:
+        first = np.array([[0.99, 0.5], [0.25, 0.25]])
+        second = np.array([[0.25, 0.25], [0.01, 0.5]])
+        self.assertAlmostEqual(torus_wasserstein2(first, second), 0.02 / np.sqrt(2))
+        self.assertLess(torus_wasserstein2(first, second), torus_rms(first, second))
+        with self.assertRaises(ValueError):
+            torus_wasserstein2(first, second[:1])
+
     def test_shortest_torus_distance_and_empty_force(self) -> None:
         point = np.array([[0.99, 0.5]])
         other = np.array([[0.01, 0.5]])
@@ -112,6 +121,9 @@ class ProcessTests(unittest.TestCase):
         result = simulate(config)
         np.testing.assert_array_equal(result.stochastic_particles, result.field_particles)
         np.testing.assert_array_equal(result.rms_distance, np.zeros(config.steps + 1))
+        np.testing.assert_array_equal(
+            result.wasserstein2_distance, np.zeros(len(result.snapshot_times))
+        )
         np.testing.assert_array_equal(result.chemical_counts, np.zeros(config.steps + 1))
 
     def test_seed_and_saved_arrays_are_reproducible(self) -> None:
@@ -120,11 +132,19 @@ class ProcessTests(unittest.TestCase):
         second = simulate(config)
         np.testing.assert_array_equal(first.stochastic_particles, second.stochastic_particles)
         np.testing.assert_array_equal(first.chemical_counts, second.chemical_counts)
+        np.testing.assert_array_equal(first.wasserstein2_distance, second.wasserstein2_distance)
+        snapshot_steps = np.rint(first.snapshot_times / config.dt).astype(int)
+        self.assertTrue(
+            np.all(first.wasserstein2_distance <= first.rms_distance[snapshot_steps] + 1e-12)
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run.npz"
             first.save(path)
             with np.load(path, allow_pickle=False) as data:
                 np.testing.assert_array_equal(data["rms_distance"], first.rms_distance)
+                np.testing.assert_array_equal(
+                    data["wasserstein2_distance"], first.wasserstein2_distance
+                )
                 offsets = data["chemical_offsets"]
                 self.assertEqual(len(offsets), len(first.chemical_snapshots) + 1)
                 self.assertEqual(offsets[-1], len(data["chemical_positions"]))

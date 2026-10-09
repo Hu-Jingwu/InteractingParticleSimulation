@@ -8,7 +8,8 @@ The [`birth_death_chemotaxis/`](birth_death_chemotaxis/) directory contains a
 two-dimensional model in which cells emit chemical particles. Chemicals
 diffuse and die, while cells move in response to the resulting chemical
 measure. It includes a paired grid-based chemical-field approximation,
-repeatable runs, a particle-count sweep, and tests.
+empirical cell Wasserstein comparisons, repeatable runs, a particle-count
+sweep, and tests.
 
 To run it:
 

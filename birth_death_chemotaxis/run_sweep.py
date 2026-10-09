@@ -29,6 +29,8 @@ def plot_sweep(
     counts: list[int],
     means: np.ndarray,
     standard_deviations: np.ndarray,
+    wasserstein2_means: np.ndarray,
+    wasserstein2_standard_deviations: np.ndarray,
     repeats: int,
     path: Path,
 ) -> None:
@@ -55,14 +57,23 @@ def plot_sweep(
 
     final_mean = means[:, -1]
     final_se = standard_deviations[:, -1] / np.sqrt(repeats)
-    ax_final.errorbar(counts, final_mean, yerr=final_se, fmt="o-", color="#295d95", capsize=4)
+    wasserstein2_se = wasserstein2_standard_deviations / np.sqrt(repeats)
+    ax_final.errorbar(
+        counts, final_mean, yerr=final_se, fmt="o-", color="#295d95",
+        capsize=4, label="paired RMS",
+    )
+    ax_final.errorbar(
+        counts, wasserstein2_means, yerr=wasserstein2_se, fmt="s-",
+        color="#b64936", capsize=4, label=r"empirical $W_2$",
+    )
     ax_final.set(
         xlabel="number of particles N",
-        ylabel="final torus RMS distance",
+        ylabel="final torus distance",
         title=f"Final mean ± standard error ({repeats} seeds)",
     )
     ax_final.set_xticks(counts)
     ax_final.grid(alpha=0.25)
+    ax_final.legend(fontsize=8)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=160)
     plt.close(fig)
@@ -83,8 +94,10 @@ def main() -> None:
         parser.error("--repeats must be positive")
 
     all_curves = []
+    all_wasserstein2_finals = []
     for count in args.counts:
         curves = []
+        wasserstein2_finals = []
         for repeat in range(args.repeats):
             config = SimulationConfig(
                 n_particles=count,
@@ -96,22 +109,34 @@ def main() -> None:
             )
             result = simulate(config)
             curves.append(result.rms_distance)
+            wasserstein2_finals.append(result.wasserstein2_distance[-1])
             print(
                 f"N={count:4d}, seed={config.seed}: "
-                f"final torus RMS={result.rms_distance[-1]:.6f}"
+                f"final torus RMS={result.rms_distance[-1]:.6f}, "
+                f"empirical W2={result.wasserstein2_distance[-1]:.6f}"
             )
         all_curves.append(np.stack(curves))
+        all_wasserstein2_finals.append(wasserstein2_finals)
 
     runs = np.stack(all_curves)
+    wasserstein2_runs = np.asarray(all_wasserstein2_finals)
     means = runs.mean(axis=1)
     standard_deviations = runs.std(axis=1, ddof=1) if args.repeats > 1 else np.zeros_like(means)
+    wasserstein2_means = wasserstein2_runs.mean(axis=1)
+    wasserstein2_standard_deviations = (
+        wasserstein2_runs.std(axis=1, ddof=1)
+        if args.repeats > 1 else np.zeros_like(wasserstein2_means)
+    )
     times = result.times
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = args.output_dir / "particle_count_summary.csv"
     with summary_path.open("w", newline="") as stream:
         writer = csv.writer(stream)
-        writer.writerow(("n_particles", "repeats", "final_mean_rms", "final_sd_rms", "final_se_rms"))
+        writer.writerow((
+            "n_particles", "repeats", "final_mean_rms", "final_sd_rms", "final_se_rms",
+            "final_mean_wasserstein2", "final_sd_wasserstein2", "final_se_wasserstein2",
+        ))
         for index, count in enumerate(args.counts):
             writer.writerow(
                 (
@@ -120,6 +145,9 @@ def main() -> None:
                     means[index, -1],
                     standard_deviations[index, -1],
                     standard_deviations[index, -1] / np.sqrt(args.repeats),
+                    wasserstein2_means[index],
+                    wasserstein2_standard_deviations[index],
+                    wasserstein2_standard_deviations[index] / np.sqrt(args.repeats),
                 )
             )
 
@@ -132,11 +160,18 @@ def main() -> None:
         rms_runs=runs,
         rms_means=means,
         rms_standard_deviations=standard_deviations,
+        final_wasserstein2_runs=wasserstein2_runs,
+        final_wasserstein2_means=wasserstein2_means,
+        final_wasserstein2_standard_deviations=wasserstein2_standard_deviations,
     )
     print(f"Saved {summary_path} and {curves_path}")
     if not args.no_plot:
         figure_path = args.output_dir / "particle_count_comparison.png"
-        plot_sweep(times, args.counts, means, standard_deviations, args.repeats, figure_path)
+        plot_sweep(
+            times, args.counts, means, standard_deviations,
+            wasserstein2_means, wasserstein2_standard_deviations,
+            args.repeats, figure_path,
+        )
         print(f"Saved {figure_path}")
 
 

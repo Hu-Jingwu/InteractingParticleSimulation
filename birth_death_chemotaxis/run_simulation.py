@@ -25,7 +25,7 @@ def expected_chemical_count(result: SimulationResult) -> np.ndarray:
 
 
 def plot_result(result: SimulationResult, path: Path) -> None:
-    """Create a compact summary of the two models and their paired distance."""
+    """Create a summary of the two models and both cell-distance metrics."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -66,9 +66,18 @@ def plot_result(result: SimulationResult, path: Path) -> None:
         ax.set(xlim=(0, 1), ylim=(0, 1), xlabel="x", ylabel="y", aspect="equal")
 
     ax = axes[1, 0]
-    ax.plot(result.times, result.rms_distance, color="#295d95", lw=2)
-    ax.set(xlabel="time", ylabel="torus RMS distance", title="Paired particle difference")
+    ax.plot(result.times, result.rms_distance, color="#295d95", lw=2, label="paired RMS")
+    ax.plot(
+        result.snapshot_times,
+        result.wasserstein2_distance,
+        "o",
+        color="#b64936",
+        ms=4,
+        label=r"empirical $W_2$ (snapshots)",
+    )
+    ax.set(xlabel="time", ylabel="torus distance", title="Cell population comparison")
     ax.grid(alpha=0.25)
+    ax.legend(fontsize=8)
 
     ax = axes[1, 1]
     ax.plot(result.times, result.chemical_counts, color="#ba7920", alpha=0.8, label="individual chemicals")
@@ -179,6 +188,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     data_path = args.output_dir / "birth_death_simulation.npz"
     csv_path = args.output_dir / "birth_death_metrics.csv"
+    wasserstein_path = args.output_dir / "birth_death_wasserstein.csv"
     result.save(data_path)
     np.savetxt(
         csv_path,
@@ -189,11 +199,19 @@ def main() -> None:
         header="time,torus_rms_distance,chemical_count,field_total_mass",
         comments="",
     )
-    print(f"Saved {data_path} and {csv_path}")
+    np.savetxt(
+        wasserstein_path,
+        np.column_stack((result.snapshot_times, result.wasserstein2_distance)),
+        delimiter=",",
+        header="time,cell_empirical_wasserstein2",
+        comments="",
+    )
+    print(f"Saved {data_path}, {csv_path}, and {wasserstein_path}")
     print(
         f"Final time={result.times[-1]:.3f}, chemicals={result.chemical_counts[-1]}, "
         f"field mass={result.field_total_mass[-1]:.6f}, "
-        f"paired torus RMS={result.rms_distance[-1]:.6f}"
+        f"paired torus RMS={result.rms_distance[-1]:.6f}, "
+        f"cell empirical W2={result.wasserstein2_distance[-1]:.6f}"
     )
     if not args.no_plot:
         figure_path = args.output_dir / "birth_death_simulation.png"

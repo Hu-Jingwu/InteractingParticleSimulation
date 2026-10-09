@@ -35,6 +35,25 @@ def torus_rms(first: Array, second: Array) -> float:
     return float(np.sqrt(np.mean(np.sum(delta * delta, axis=-1))))
 
 
+def torus_wasserstein2(first: Array, second: Array) -> float:
+    """Exact W2 distance between equal-weight cell clouds on the unit torus."""
+    from scipy.optimize import linear_sum_assignment
+
+    first = np.asarray(first, dtype=float)
+    second = np.asarray(second, dtype=float)
+    if (
+        first.ndim != 2
+        or first.shape[1] != 2
+        or first.shape != second.shape
+        or len(first) == 0
+    ):
+        raise ValueError("cell clouds must be nonempty arrays of the same (N, 2) shape")
+    displacement = minimum_image(first[:, None, :] - second[None, :, :])
+    squared_cost = np.sum(displacement * displacement, axis=-1)
+    rows, columns = linear_sum_assignment(squared_cost)
+    return float(np.sqrt(np.mean(squared_cost[rows, columns])))
+
+
 @dataclass(frozen=True)
 class SimulationConfig:
     n_particles: int = 50
@@ -256,6 +275,7 @@ class SimulationResult:
     config: SimulationConfig
     times: Array
     rms_distance: Array
+    wasserstein2_distance: Array
     chemical_counts: NDArray[np.int64]
     field_total_mass: Array
     snapshot_times: Array
@@ -277,6 +297,7 @@ class SimulationResult:
             config=json.dumps(asdict(self.config)),
             times=self.times,
             rms_distance=self.rms_distance,
+            wasserstein2_distance=self.wasserstein2_distance,
             chemical_counts=self.chemical_counts,
             field_total_mass=self.field_total_mass,
             snapshot_times=self.snapshot_times,
@@ -350,6 +371,10 @@ def simulate(config: SimulationConfig) -> SimulationResult:
         config=config,
         times=times,
         rms_distance=rms,
+        wasserstein2_distance=np.array([
+            torus_wasserstein2(first, second)
+            for first, second in zip(stochastic_history, field_history)
+        ]),
         chemical_counts=counts,
         field_total_mass=masses,
         snapshot_times=times[snapshot_steps],

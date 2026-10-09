@@ -11,9 +11,13 @@ runs two coupled descriptions side by side:
    particle system at the same rate, and loses mass at rate `c_d`.
 
 Both particle systems start at the same locations and receive the same
-Brownian increments. This makes their torus root mean squared (RMS) distance
-a useful pathwise comparison. One pathwise comparison alone is **not** a
-propagation-of-chaos result.
+Brownian increments. Their paired torus root mean squared (RMS) distance
+measures how corresponding paths separate. At saved time points, the program
+also computes the exact empirical 2-Wasserstein distance (`W2`) between the
+two equal-size cell populations using periodic distances and an optimal
+assignment. `W2` compares spatial distributions without relying on cell
+labels, and is at most the paired RMS. Neither comparison alone proves
+propagation of chaos or convergence to the continuum mean-field law.
 
 ## Run
 
@@ -28,9 +32,10 @@ The default run uses `N=50`, `dt=0.002`, `450` steps (`0.9` time units),
 `alpha_p=0.5`, `alpha_c=0.4`, `c_b=8`, `c_d=2`, and a `100 × 100` grid, as in
 Table 5.1 and the shorter example in Chapter 5. The program writes:
 
-- `output/birth_death_simulation.png`: final positions, field, pathwise RMS,
-  and chemical count/mass balance;
+- `output/birth_death_simulation.png`: final positions, field, paired RMS,
+  empirical cell `W2`, and chemical count/mass balance;
 - `output/birth_death_metrics.csv`: one row per time step;
+- `output/birth_death_wasserstein.csv`: empirical cell `W2` at saved time points;
 - `output/birth_death_simulation.npz`: all metrics and sampled states. The
   chemical snapshots are concatenated in `chemical_positions`; snapshot `k`
   is the slice from `chemical_offsets[k]` to `chemical_offsets[k+1]`.
@@ -51,7 +56,7 @@ single` places all particles uniformly in `[0,0.25]²`, as described in
 Chapter 5; the default `split` uses the appendix's two squares. The other
 parameters can be changed with `python run_simulation.py --help`.
 
-NumPy alone suffices for data generation: use `--no-plot` if Matplotlib is
+NumPy and SciPy suffice for data generation: use `--no-plot` if Matplotlib is
 unavailable. Run the standard-library checks with:
 
 ```bash
@@ -59,15 +64,16 @@ python -m unittest discover -s tests -v
 ```
 
 For the Chapter 5 particle-count comparison, run repeated seeds and save the
-mean, sample standard deviation, and standard error of the **final RMS**:
+mean, sample standard deviation, and standard error of the **final paired RMS
+and empirical cell W2**:
 
 ```bash
 python run_sweep.py --counts 20,50,100,200,400 --repeats 5 --steps 2000
 ```
 
-The sweep writes a CSV summary, an NPZ file of every seed's RMS time series,
-and a comparison plot under `output/sweep/`. A full five-count, five-seed,
-four-second sweep may take several minutes; use smaller `--counts` or
+The sweep writes a CSV summary, an NPZ file of every seed's RMS time series
+and final W2 value, and a comparison plot under `output/sweep/`. A full
+five-count, five-seed, four-second sweep may take several minutes; use smaller `--counts` or
 `--steps` for a quick check. Error bars are standard errors across seeds.
 
 ## Implemented equations and numerical choices
@@ -110,6 +116,14 @@ Near the hard cutoff boundary, that interpolation smooths the force over
 roughly one grid cell. Paired-path differences therefore include **grid
 error** as well as chemical birth/death noise; a grid-refinement study is
 needed before interpreting their size as only stochastic error.
+
+For two cell clouds `X` and `Y`, each of size `N`, the reported torus distance is
+`W2 = sqrt(min_permutation sum_i torus_distance(X_i, Y_perm(i))² / N)`.
+Assignments are computed only at stored snapshots (and at the final time),
+so large repeated sweeps do not solve an assignment at every time step.
+Chemical particle mass and grid-field mass generally differ after random
+births and deaths; ordinary balanced Wasserstein distance is therefore not
+applied directly to the chemical measures.
 
 ## Report inconsistencies that matter for thesis work
 
